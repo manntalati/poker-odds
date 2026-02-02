@@ -9,20 +9,24 @@ class CardDetector:
         except Exception as e:
             print(f"Error loading model: {e}")
             self.model = None
+        
+        # Detection settings
+        self.confidence_threshold = 0.5  # Only accept high-confidence detections
+        self.iou_threshold = 0.5  # For removing overlapping boxes
 
     def detect(self, frame):
         """
         Detects cards in the frame.
-        Returns a list of tuples: (card_label, confidence, bbox)
-        card_label in Treys format: e.g. 'Ah', 'Ks', 'Th', '2c'
-        bbox is [x1, y1, x2, y2]
+        Returns a list of dicts: {'label': 'Ah', 'conf': 0.9, 'bbox': (x1,y1,x2,y2)}
         """
         detected_cards = []
         if self.model is None:
             return detected_cards
 
-        results = self.model(frame, verbose=False)
+        # Run inference with built-in NMS
+        results = self.model(frame, verbose=False, conf=self.confidence_threshold, iou=self.iou_threshold)
         
+        raw_detections = []
         for result in results:
             for box in result.boxes:
                 cls_id = int(box.cls[0])
@@ -34,13 +38,21 @@ class CardDetector:
                 treys_label = self._convert_to_treys(label)
                 
                 if treys_label:
-                    # coords
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    detected_cards.append({
+                    raw_detections.append({
                         'label': treys_label,
                         'conf': conf,
                         'bbox': (x1, y1, x2, y2)
                     })
+        
+        # Deduplicate: If the same card label appears multiple times, keep only highest confidence
+        seen_labels = {}
+        for det in raw_detections:
+            label = det['label']
+            if label not in seen_labels or det['conf'] > seen_labels[label]['conf']:
+                seen_labels[label] = det
+        
+        detected_cards = list(seen_labels.values())
         
         return detected_cards
 

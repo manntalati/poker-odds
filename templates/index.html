@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Poker Odds Bot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        video {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        #controls {
+            width: 100%;
+            max-width: 400px;
+            background: #2d2d2d;
+            padding: 12px;
+            border-radius: 12px;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            flex: 1;
+        }
+
+        .btn-lock {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-reset {
+            background: #dc3545;
+            color: white;
+        }
+
+        /* Card Display */
+        .cards-section {
+            background: #222;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .cards-label {
+            font-size: 0.75em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .cards-row {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .card-chip {
+            background: #fff;
+            color: #000;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 1em;
+        }
+
+        .card-chip.heart,
+        .card-chip.diamond {
+            color: #e74c3c;
+        }
+
+        .card-chip.spade,
+        .card-chip.club {
+            color: #2c3e50;
+        }
+
+        .card-placeholder {
+            background: #444;
+            color: #888;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        /* Money Inputs */
+        .money-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+        .money-input {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .money-input label {
+            font-size: 0.7em;
+            color: #aaa;
+            margin-bottom: 3px;
+        }
+
+        .money-input input {
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 1em;
+            width: 100%;
+        }
+
+        /* Stats */
+        .stats-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stat-item {
+            background: #333;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #00ff00;
+        }
+
+        .stat-label {
+            font-size: 0.7em;
+            color: #aaa;
+        }
+
+        .action-box {
+            grid-column: span 2;
+            background: #444;
+        }
+
+        /* EV Display */
+        .ev-display {
+            text-align: center;
+            padding: 8px;
+            background: #1a1a1a;
+            border-radius: 8px;
+        }
+
+        .ev-value {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .ev-positive {
+            color: #00ff00;
+        }
+
+        .ev-negative {
+            color: #ff4444;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="video-container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+
+    <div id="controls">
+        <!-- Buttons -->
+        <div class="control-row">
+            <button id="lock-btn" class="btn btn-lock">LOCK HAND</button>
+            <button id="lock-board-btn" class="btn" style="background: #6f42c1; color: white;">LOCK FLOP</button>
+            <button id="reset-btn" class="btn btn-reset">RESET</button>
+        </div>
+
+        <!-- Your Hand -->
+        <div class="cards-section">
+            <div class="cards-label">YOUR HAND (Tap to edit)</div>
+            <div class="cards-row" id="hero-cards">
+                <span class="card-placeholder" onclick="manualEdit('hero', 0)">?</span>
+                <span class="card-placeholder" onclick="manualEdit('hero', 1)">?</span>
+            </div>
+        </div>
+
+        <!-- Community Cards -->
+        <div class="cards-section">
+            <div class="cards-label">BOARD (<span id="stage-label">Pre-Flop</span>) (Tap to edit)</div>
+            <div class="cards-row" id="community-cards">
+                <span class="card-placeholder" onclick="manualEdit('community', 0)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 1)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 2)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 3)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 4)">-</span>
+            </div>
+        </div>
+
+        <!-- Money Inputs -->
+        <div class="money-section">
+            <div class="money-input">
+                <label>My Stack ($)</label>
+                <input type="number" id="my-stack" value="100" min="0">
+            </div>
+            <div class="money-input">
+                <label>Pot Size ($)</label>
+                <input type="number" id="pot-size" value="10" min="0">
+            </div>
+            <div class="money-input">
+                <label>To Call ($)</label>
+                <input type="number" id="bet-to-call" value="5" min="0">
+            </div>
+        </div>
+
+        <!-- Player Count -->
+        <div class="control-row">
+            <label>Players: <span id="num-players-val">2</span></label>
+            <input type="range" id="num-players" min="2" max="9" value="2" style="flex:1;">
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-box">
+            <div class="stat-item">
+                <div class="stat-value" id="win-rate">--%</div>
+                <div class="stat-label">Win Rate</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="pot-odds" style="color:#00ffff">--%</div>
+                <div class="stat-label">Pot Odds</div>
+            </div>
+            <div class="stat-item action-box">
+                <div class="stat-value" id="recommendation" style="color:#ffffff">WAITING</div>
+                <div class="stat-label">Action</div>
+            </div>
+        </div>
+
+        <!-- EV -->
+        <div class="ev-display">
+            <span class="ev-value" id="ev-value">EV: $0.00</span>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const numPlayersSlider = document.getElementById('num-players');
+        const numPlayersVal = document.getElementById('num-players-val');
+
+        // Buttons
+        const lockBtn = document.getElementById('lock-btn');
+        const lockBoardBtn = document.getElementById('lock-board-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // Card displays
+        const heroCardsEl = document.getElementById('hero-cards');
+        const communityCardsEl = document.getElementById('community-cards');
+        const stageLabelEl = document.getElementById('stage-label');
+
+        // Money inputs
+        const myStackInput = document.getElementById('my-stack');
+        const potSizeInput = document.getElementById('pot-size');
+        const betToCallInput = document.getElementById('bet-to-call');
+
+        // Stats elements
+        const winRateEl = document.getElementById('win-rate');
+        const potOddsEl = document.getElementById('pot-odds');
+        const recEl = document.getElementById('recommendation');
+        const evValueEl = document.getElementById('ev-value');
+
+        let ws;
+        let isStreamActive = false;
+        let isHandLocked = false;
+        let lockedBoardCount = 0;
+
+        // Update slider value
+        numPlayersSlider.addEventListener('input', (e) => {
+            numPlayersVal.textContent = e.target.value;
+        });
+
+        lockBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'lock' }));
+            }
+        });
+
+        lockBoardBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'lock_board' }));
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'reset' }));
+            }
+        });
+
+        function manualEdit(type, index) {
+            const val = prompt(`Enter card for ${type} ${index + 1} (e.g. As, Kh, Td, 2c):`);
+            if (val && val.length >= 2) {
+                const card = val.charAt(0).toUpperCase() + val.charAt(1).toLowerCase();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'set_manual',
+                        card_type: type,
+                        index: index,
+                        label: card
+                    }));
+                }
+            }
+        }
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }
+                });
+                video.srcObject = stream;
+                isStreamActive = true;
+                connectWebSocket();
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                alert("Could not access camera. Please allow permissions.");
+            }
+        }
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+            ws.onopen = () => {
+                console.log("Connected to server");
+                sendFrame();
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'lock_ack') {
+                    if (data.success) {
+                        isHandLocked = true;
+                        lockBtn.innerText = "LOCKED ✓";
+                        lockBtn.style.background = "#28a745";
+                    } else {
+                        alert("Need 2 cards visible to lock!");
+                    }
+                } else if (data.type === 'lock_board_ack') {
+                    if (data.success) {
+                        lockedBoardCount = data.count;
+                        if (lockedBoardCount == 3) lockBoardBtn.innerText = "LOCK TURN";
+                        else if (lockedBoardCount == 4) lockBoardBtn.innerText = "LOCK RIVER";
+                        else if (lockedBoardCount >= 5) {
+                            lockBoardBtn.innerText = "LOCKED ✓";
+                            lockBoardBtn.style.background = "#28a745";
+                        }
+                    } else {
+                        alert("Need at least 3 cards (Flop) to lock!");
+                    }
+                } else if (data.type === 'reset_ack') {
+                    isHandLocked = false;
+                    lockedBoardCount = 0;
+                    lockBtn.innerText = "LOCK HAND";
+                    lockBtn.style.background = "#007bff";
+                    lockBoardBtn.innerText = "LOCK FLOP";
+                    lockBoardBtn.style.background = "#6f42c1";
+                    resetCardDisplays();
+                } else if (data.type === 'result') {
+                    updateUI(data);
+                    requestAnimationFrame(sendFrame);
+                } else {
+                    requestAnimationFrame(sendFrame);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log("Disconnected. Reconnecting...");
+                setTimeout(connectWebSocket, 1000);
+            };
+        }
+
+        function sendFrame() {
+            if (!isStreamActive || ws.readyState !== WebSocket.OPEN) return;
+
+            canvas.width = video.videoWidth / 2;
+            canvas.height = video.videoHeight / 2;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const dataURL = canvas.toDataURL('image/jpeg', 0.7);
+
+            ws.send(JSON.stringify({
+                type: 'image',
+                data: dataURL,
+                num_players: numPlayersSlider.value
+            }));
+        }
+
+        function resetCardDisplays() {
+            heroCardsEl.innerHTML = `
+                <span class="card-placeholder" onclick="manualEdit('hero', 0)">?</span>
+                <span class="card-placeholder" onclick="manualEdit('hero', 1)">?</span>`;
+            communityCardsEl.innerHTML = `
+                <span class="card-placeholder" onclick="manualEdit('community', 0)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 1)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 2)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 3)">-</span>
+                <span class="card-placeholder" onclick="manualEdit('community', 4)">-</span>`;
+            stageLabelEl.textContent = 'Pre-Flop';
+        }
+
+        function renderCard(cardStr, type, index) {
+            const rank = cardStr.slice(0, -1);
+            const suitChar = cardStr.slice(-1).toLowerCase();
+            const suitMap = { 'h': '♥', 'd': '♦', 's': '♠', 'c': '♣' };
+            const suitClass = { 'h': 'heart', 'd': 'diamond', 's': 'spade', 'c': 'club' };
+
+            return `<span class="card-chip ${suitClass[suitChar] || ''}" onclick="manualEdit('${type}', ${index})">
+                ${rank}${suitMap[suitChar] || suitChar}
+            </span>`;
+        }
+
+        function updateUI(data) {
+            const odds = data.odds;
+            const heroCards = data.hero_hand || [];
+            const communityCards = data.community_cards || [];
+
+            // Update Hero Hand Display
+            if (heroCards.length > 0) {
+                heroCardsEl.innerHTML = heroCards.map((c, i) => renderCard(c, 'hero', i)).join('');
+            } else if (!isHandLocked) {
+                heroCardsEl.innerHTML = '<span class="card-placeholder" onclick="manualEdit(\'hero\', 0)">Scanning...</span>';
+            }
+
+            // Update Community Cards Display
+            let boardHtml = '';
+            for (let i = 0; i < 5; i++) {
+                if (communityCards[i]) {
+                    boardHtml += renderCard(communityCards[i], 'community', i);
+                } else {
+                    boardHtml += `<span class="card-placeholder" onclick="manualEdit('community', ${i})">-</span>`;
+                }
+            }
+            communityCardsEl.innerHTML = boardHtml;
+
+            // Update stage label
+            stageLabelEl.textContent = odds.stage || 'Pre-Flop';
+
+            // Win Rate
+            const winRate = odds.win_rate || 0;
+            winRateEl.textContent = `${winRate.toFixed(1)}%`;
+
+            // Calculate Pot Odds
+            const pot = parseFloat(potSizeInput.value) || 0;
+            const toCall = parseFloat(betToCallInput.value) || 0;
+            let potOdds = 0;
+            if (toCall > 0) {
+                potOdds = (toCall / (pot + toCall)) * 100;
+            }
+            potOddsEl.textContent = `${potOdds.toFixed(1)}%`;
+
+            // Calculate EV
+            const winProb = winRate / 100;
+            const loseProb = 1 - winProb;
+            const ev = (winProb * pot) - (loseProb * toCall);
+
+            evValueEl.textContent = `EV: ${ev >= 0 ? '+' : ''}$${ev.toFixed(2)}`;
+            evValueEl.className = 'ev-value ' + (ev >= 0 ? 'ev-positive' : 'ev-negative');
+
+            // Recommendation based on pot odds vs equity
+            let rec = "WAIT";
+            if (isHandLocked) {
+                if (toCall === 0) {
+                    rec = "CHECK";
+                } else if (winRate > potOdds + 10) {
+                    rec = "RAISE";
+                } else if (winRate > potOdds) {
+                    rec = "CALL";
+                } else if (winRate > potOdds - 5) {
+                    rec = "BORDERLINE";
+                } else {
+                    rec = "FOLD";
+                }
+            } else {
+                rec = "SCAN & LOCK";
+            }
+
+            if (odds.stage === "Waiting for Hand") rec = "SHOW CARDS";
+
+            recEl.textContent = rec;
+
+            // Color coding
+            if (rec === "RAISE") recEl.style.color = "#00ff00";
+            else if (rec === "CALL" || rec === "CHECK") recEl.style.color = "#00ccff";
+            else if (rec === "FOLD") recEl.style.color = "#ff4444";
+            else if (rec === "BORDERLINE") recEl.style.color = "#ffaa00";
+            else recEl.style.color = "#ffffff";
+        }
+
+        // Start on load
+        startCamera();
+    </script>
+</body>
+
+</html>
